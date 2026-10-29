@@ -1,0 +1,38 @@
+# Virtual environments
+bsk-env/
+.venv/
+venv/
+env/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Basilisk Monte Carlo run output
+*_MC/
+mc_runs/
+
+# Editors / IDEs
+.vscode/
+.idea/
+.vs/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local environment / secrets
+.env

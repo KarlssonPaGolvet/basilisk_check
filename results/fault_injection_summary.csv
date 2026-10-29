@@ -1,0 +1,8 @@
+check,result,detail
+Wheel 1 max torque reduced,PASS,"u_max 0.200 -> 0.020 N*m; peak |torque| slew A 0.200, slew B 0.020 N*m"
+Wheel 1 friction added,PASS,"|friction| before 0.0000, after (max) 0.0050 N*m"
+Degraded slew is slower,PASS,"settle time slew A 192 s, slew B 496 s (|sigma_BR| < 0.005)"
+Battery capacity fault,PASS,stored 415.1 Wh -> 277.8 Wh (limit 277.8 Wh); reported capacity still 556 Wh
+Concurrent faults in one step,PASS,wheel and battery faults injected at t = 3000.0 s
+Orbit degradation (drag x10),PASS,"drag force 1.95 -> 17.70 mN; semi-major axis change orbit 1 -26.5 m, orbit 2 -262.5 m (ratio 9.9)"
+No NaN / implausible values,PASS,none
