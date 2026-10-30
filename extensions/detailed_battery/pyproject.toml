@@ -1,0 +1,14 @@
+[build-system]
+requires = ["scikit-build-core>=0.9.3", "numpy>=1.24", "bsk-sdk==2.12.1", "bsk==2.12.1", "swig==4.4.1"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "detailed-battery"
+version = "0.1.0"
+description = "Equivalent-circuit Li-ion battery pack module for Basilisk"
+requires-python = ">=3.9"
+# Must match the bsk-sdk version used to build this extension exactly.
+dependencies = ["bsk==2.12.1"]
+
+[tool.scikit-build]
+wheel.packages = ["detailed_battery"]

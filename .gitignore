@@ -18,6 +18,8 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+extension-build/
+extension-dist/
 
 # Basilisk Monte Carlo run output
 *_MC/
