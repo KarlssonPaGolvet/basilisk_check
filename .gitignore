@@ -20,6 +20,7 @@ dist/
 *.egg-info/
 extension-build/
 extension-dist/
+Vizard_Windows64/
 
 # Basilisk Monte Carlo run output
 *_MC/

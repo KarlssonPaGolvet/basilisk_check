@@ -424,7 +424,7 @@ def run(show_plots, orbitCase, useSphericalHarmonics, planetCase):
 
     if vizSupport.vizFound:
         viz = vizSupport.enableUnityVisualization(scSim, simTaskName, scObject,
-                                                  # saveFile=__file__
+                                                  saveFile=__file__
                                                   # liveStream=True
                                                   )
 

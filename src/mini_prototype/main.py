@@ -15,15 +15,17 @@ Outputs (in results/mini_prototype/):
     internal_sensors.csv, navigation.csv, inventory.md, summary.png
 
 Run from the repo root with the virtual environment active:
-    python src/mini_prototype/main.py
+    python src/mini_prototype/main.py          normal run
+    python src/mini_prototype/main.py --viz    also write a Vizard file to results/_VizFiles/
 """
 
+import argparse
 import os
 import time
 from types import SimpleNamespace
 
 from Basilisk import __path__ as bsk_path
-from Basilisk.utilities import SimulationBaseClass, macros
+from Basilisk.utilities import SimulationBaseClass, macros, vizSupport
 
 import config
 from control import SunPointingControl
@@ -63,13 +65,30 @@ def build(sim):
     return p
 
 
-def main():
+def enable_viz(sim, sc_list, rw_list, name):
+    """Add Vizard output on the dynamics task; writes results/_VizFiles/<name>_UnityViz.bin.
+
+    rw_list has one entry per spacecraft: its ReactionWheelStateEffector, or None.
+    Keep the returned object referenced for the whole run.
+    """
+    viz = vizSupport.enableUnityVisualization(sim, TASK, sc_list,
+                                              saveFile=os.path.join(config.REPO_ROOT, "results", name),
+                                              rwEffectorList=rw_list)
+    return viz, os.path.join(config.REPO_ROOT, "results", "_VizFiles", f"{name}_UnityViz.bin")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--viz", action="store_true", help="write a Vizard file to results/_VizFiles/")
+    args = ap.parse_args(argv)
     wall_start = time.perf_counter()
 
     sim = SimulationBaseClass.SimBaseClass()
     sim.CreateNewProcess(PROCESS).addTask(sim.CreateNewTask(TASK, config.dyn_step_ns()))
     parts = build(sim)
     period_s = parts.period_s
+    if args.viz:
+        parts.viz, viz_file = enable_viz(sim, [parts.sc], [parts.rws.effector], "mini_prototype")
 
     sim_time_s = config.NUM_ORBITS * period_s
     sim.InitializeSimulation()
@@ -115,6 +134,8 @@ def main():
         print(f"  {name + ' data set':<30}: {df.shape[0]} rows x {df.shape[1]} cols -> {csv_paths[name]}")
     print(f"  {'Inventory':<30}: {inv_path}")
     print(f"  {'Summary plot':<30}: {png_path}")
+    if args.viz:
+        print(f"  {'Vizard file':<30}: {viz_file}")
     print("=" * 64)
     return 0
 

@@ -19,11 +19,13 @@ Checks:
     - adding the debris leaves the satellite's recorded data bit-identical (vs a run without it)
 
 Run from the repo root with bsk-env active:
-    python src\\mini_prototype\\check_debris_proto.py
+    python src\\mini_prototype\\check_debris_proto.py          checks only
+    python src\\mini_prototype\\check_debris_proto.py --viz    also write a Vizard file (satellite + debris)
 
 Output: results\\proto_debris.png
 """
 
+import argparse
 import os
 import time
 
@@ -119,8 +121,11 @@ def add_drag(sim, sc, atmo, idx, area, cd, com_offset):
     return drag
 
 
-def run_prototype(with_debris, r_d0=None, v_d0=None):
-    """Full prototype for NUM_ORBITS; optionally with the debris object and the proximity event."""
+def run_prototype(with_debris, r_d0=None, v_d0=None, viz=False):
+    """Full prototype for NUM_ORBITS; optionally with the debris object and the proximity event.
+
+    viz: also write a Vizard file showing the satellite (with its wheels) and the debris.
+    """
     sim = SimulationBaseClass.SimBaseClass()
     sim.CreateNewProcess(main.PROCESS).addTask(sim.CreateNewTask(main.TASK, config.dyn_step_ns()))
     parts = main.build(sim)
@@ -157,6 +162,9 @@ def run_prototype(with_debris, r_d0=None, v_d0=None):
 
         sim.createNewEvent("proximityAlert", config.dyn_step_ns(), True,
                            conditionFunction=lambda s: distance() < ALERT_KM * 1e3, actionFunction=alert)
+        if viz:
+            out["viz"], out["viz_file"] = main.enable_viz(sim, [parts.sc, deb], [parts.rws.effector, None],
+                                                          "proto_debris")
 
     sim.InitializeSimulation()
     sim.ConfigureStopTime(macros.sec2nano(config.NUM_ORBITS * parts.period_s))
@@ -223,7 +231,10 @@ def frames_identical(fa, fb):
 
 
 # ---------------------------------------------------------------- check
-def main_check():
+def main_check(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--viz", action="store_true", help="write a Vizard file of the debris run to results/_VizFiles/")
+    args = ap.parse_args(argv)
     wall0 = time.perf_counter()
     print("Run 1/3: prototype without debris (reference) ...")
     ref = run_prototype(False)
@@ -233,7 +244,7 @@ def main_check():
     t_end = config.NUM_ORBITS * period
 
     print("Run 2/3: prototype with debris ...")
-    run = run_prototype(True, r_d0, v_d0)
+    run = run_prototype(True, r_d0, v_d0, viz=args.viz)
     t = run["sat_log"].times() * macros.NANO2SEC
     r1, v1 = np.array(run["sat_log"].r_BN_N), np.array(run["sat_log"].v_BN_N)
     r2, v2 = np.array(run["deb_log"].r_BN_N), np.array(run["deb_log"].v_BN_N)
@@ -299,6 +310,8 @@ def main_check():
     print("=" * 118)
 
     plot(t, dist, t2, dist2, tk, distk, t_ca, d_ca, alerts, period)
+    if args.viz:
+        print(f"Vizard file: {run['viz_file']}")
     return 0 if all(ok for _, _, ok in checks) else 1
 
 
