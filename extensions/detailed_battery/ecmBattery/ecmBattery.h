@@ -68,6 +68,7 @@ class EcmBattery : public PowerStorageBase
     double cellC1 = 2000.0;             //!< [F] RC-branch capacitance of one cell (tau = R1*C1)
     double initialSoc = 0.8;            //!< [-] state of charge at Reset
     double cutoffCellVoltage = 3.0;     //!< [V] BMS cutoff: discharge current is limited to keep cells at or above this
+    double maxCellVoltage = 4.20;       //!< [V] CV charge limit: charge current is limited to keep cells at or below this
     double depletedSocThreshold = 1e-6; //!< [-] discharge stops (depleted) when SoC is at or below this
 
     // ---- faults (can be changed during a run) ----

@@ -24,8 +24,14 @@ A BMS current limit keeps every cell at or above `cutoffCellVoltage`: the discha
 is capped at `Imax = (E − nSeries·cutoffCellVoltage) / R0` (zero if that is negative), where
 E is the open-circuit voltage minus the RC voltage. If the request needs more than `Imax`
 (or cannot be met at all), the pack delivers `Imax` and sets both `powerLimited` and
-`underVoltage` (= "held at the cutoff limit"). Charging is not limited.
-Charging stops at 100 % (`chargeLimited`). Discharging stops when depleted:
+`underVoltage` (= "held at the cutoff limit").
+
+Charging mirrors this with a constant-voltage (CV) limit: the charge current is limited to
+`Imin = (E − nSeries·maxCellVoltage) / R0` (negative = charge; zero if E is already above
+the limit), so no cell exceeds `maxCellVoltage` (default 4.20 V). If the requested charge
+current is larger in magnitude, the pack accepts `Imin` and sets `chargeLimited`. The
+current then tapers as the cell fills, like the CV phase of a CC/CV charger.
+Charging also stops at 100 % (`chargeLimited`). Discharging stops when depleted:
 `depleted` = SoC at or below `depletedSocThreshold` (default 1e-6) while a discharge is
 requested. A threshold is used because, with the default OCV table (OCV at 0 % equals the
 3.0 V cutoff), the BMS limit makes SoC approach 0 asymptotically.
@@ -56,10 +62,9 @@ start at 0 and end at 1, and every OCV value must be positive (checked at Reset)
   balance exactly: the change in `storageLevel` over a step differs from
   `currentNetPower·dt` by the internal losses and the OCV-vs-mean-voltage difference.
   `storageLevel / storageCapacity` is still the exact SoC.
-- **No CC/CV charging.** Charging has no voltage limit (constant-voltage phase) and no
-  maximum charge current: the pack accepts the full charge power until SoC reaches 1.0,
-  then the current drops to zero (`chargeLimited`). Charge that would overshoot 1.0 in the
-  last step is clipped.
+- **No separate maximum charge current.** Charging is limited only by the CV limit
+  (`maxCellVoltage`): below it the pack accepts whatever charge power the nodes offer, so
+  there is no constant-current (CC) cap such as a 0.5 C charge limit.
 - **Keep the source messages referenced.** The battery reads the power-node messages by
   reference and does not keep their Python objects alive. Keep every module whose
   `nodePowerOutMsg` is connected (and the battery itself) referenced for the whole run.
@@ -92,7 +97,8 @@ Runs three Basilisk simulations and prints PASS/FAIL per check:
 - **Faults** (5 W load): resistance ×2 (30 min), a failed string (60 min), a shorted cell
   (90 min) and a 300 W overload (120 min). Checks coulomb counting, the BMS limit during
   the overload, RC recovery after it and `heatLoss ≥ 0`. Saves `results\ecm_battery_check.png`.
-- **Charging** (+20 W source from SoC 0.98): negative current, `chargeLimited`, SoC ≤ 1.
+- **Charging** (+20 W source from SoC 0.90, 1 h): negative current, `chargeLimited` at the
+  start of the CV phase, cell voltage ≤ `maxCellVoltage`, current tapering in CV, SoC ≤ 1.
 - **Depletion** (5 W load from SoC 0.01): `depleted`, current to zero, SoC ≥ 0.
 
 ## Using it in the mini prototype (power.py)

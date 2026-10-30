@@ -11,7 +11,7 @@ Timeline (1 s steps, 2.5 h):
    3600 s  one parallel string fails (open)       (cell drop-off -> capacity loss)
    5400 s  one series cell per string shorts      (voltage drop-off)
    7200 s  extra 300 W load for 60 s              (overload, held at the BMS cutoff limit)
-Scenario 2 - charging: +20 W source, start at 98 % SoC.
+Scenario 2 - charging: +20 W source, start at 90 % SoC (CC phase, then CV at maxCellVoltage).
 Scenario 3 - depletion: 5 W load, start at 1 % SoC.
 
 Run from the repo root with bsk-env active, after installing the extension wheel:
@@ -169,14 +169,25 @@ def fault_checks():
 
 
 def charge_checks():
-    _, p, _ = run_scenario(+CHARGE_W, 0.98, 900.0)
-    t, I, soc, full = p["t"], p["packCurrent"], p["stateOfCharge"], p["chargeLimited"]
-    k_full = int(np.argmax(full == 1)) if full.any() else len(t)
-    charging = (t >= 1.0) & (np.arange(len(t)) < k_full)
+    bat, p, _ = run_scenario(+CHARGE_W, 0.90, 3600.0)
+    t, I, soc, lim, vcell = p["t"], p["packCurrent"], p["stateOfCharge"], p["chargeLimited"], p["cellVoltage"]
+    vmax = bat.maxCellVoltage
+    # CC phase: before the CV limit first engages; CV phase: chargeLimited from then on
+    k_cv = int(np.argmax(lim == 1)) if lim.any() else len(t)
+    cc = (t >= 1.0) & (np.arange(len(t)) < k_cv)
+    cv = np.arange(len(t)) >= k_cv
+    i_cv0 = I[k_cv] if lim.any() else np.nan
     return [
-        ("Charging: current < 0 while charging", f"{int(charging.sum())} s charging, max current {I[charging].max():.3f} A",
-         charging.any() and bool(np.all(I[charging] < 0.0))),
-        ("Charging: chargeLimited becomes 1", f"at t = {t[k_full]:.0f} s" if full.any() else "never", bool(full.any())),
+        ("Charging: current < 0 in the CC phase", f"{int(cc.sum())} s CC, current {I[cc].min():.3f} .. {I[cc].max():.3f} A",
+         cc.any() and bool(np.all(I[cc] < 0.0))),
+        ("Charging: chargeLimited at CV start", f"at t = {t[k_cv]:.0f} s, SoC {soc[k_cv] * 100:.2f} %" if lim.any() else "never",
+         bool(lim.any())),
+        ("Charging: cell voltage <= maxCellVoltage", f"max {vcell.max():.6f} V (limit {vmax:.2f} V)",
+         bool(np.all(vcell <= vmax + 1e-6))),
+        ("Charging: held at maxCellVoltage in CV", f"max |V - {vmax:.2f}| in CV {np.abs(vcell[cv] - vmax).max():.2e} V"
+         if lim.any() else "no CV phase", lim.any() and bool(np.all(np.abs(vcell[cv] - vmax) < 1e-6))),
+        ("Charging: current tapers in CV", f"{i_cv0:.3f} A at CV start -> {I[-1]:.4f} A after {t[-1] - t[k_cv]:.0f} s"
+         if lim.any() else "no CV phase", lim.any() and abs(I[-1]) < 0.1 * abs(i_cv0)),
         ("Charging: SoC never exceeds 1", f"max SoC {soc.max():.12f}", bool(np.all(soc <= 1.0))),
         ("Charging: heatLoss >= 0", f"min {p['heatLoss'].min():.3e} W", bool(np.all(p["heatLoss"] >= 0.0))),
     ]

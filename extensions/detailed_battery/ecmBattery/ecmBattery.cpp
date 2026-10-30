@@ -168,16 +168,24 @@ void EcmBattery::evaluateBatteryModel(PowerStorageStatusMsgPayload* msg)
     const double e = ocvPack - v1Pack;                              // [V] source voltage behind R0
 
     // Solve demand = V*I = e*I - R0*I^2 for the pack current I (+ = discharge).
-    // BMS limit: the discharge current is capped so the cell voltage never drops below
-    // cutoffCellVoltage, i.e. I <= Imax = (e - nS*cutoff) / R0. Charging is not limited.
+    // BMS limits keep the cell terminal voltage between cutoffCellVoltage and maxCellVoltage:
+    //   discharge  I <= Imax = (e - nS*cutoff) / R0
+    //   charge     I >= Imin = (e - nS*maxCell) / R0   (negative; constant-voltage phase)
     const double vMinPack = nS * this->cutoffCellVoltage;  // [V]
+    const double vMaxPack = nS * this->maxCellVoltage;     // [V]
     double current = 0.0;
     bool heldAtCutoff = false;
+    bool heldAtMaxVoltage = false;
     if (r0Pack <= 1e-12) {
         current = (std::fabs(e) > 1e-12) ? demand / e : 0.0;
+        // no series resistance: the terminal voltage equals e
         if (current > 0.0 && e < vMinPack) {
-            current = 0.0;  // no series resistance: the terminal voltage equals e
+            current = 0.0;
             heldAtCutoff = true;
+        }
+        if (current < 0.0 && e > vMaxPack) {
+            current = 0.0;
+            heldAtMaxVoltage = true;
         }
     } else {
         const double iMax = std::max(0.0, (e - vMinPack) / r0Pack);
@@ -192,9 +200,16 @@ void EcmBattery::evaluateBatteryModel(PowerStorageStatusMsgPayload* msg)
                 heldAtCutoff = true;
             }
         }
+        // Constant-voltage charging: the charge current tapers as the cell fills.
+        const double iMin = std::min(0.0, (e - vMaxPack) / r0Pack);
+        if (current < iMin) {
+            current = iMin;
+            heldAtMaxVoltage = true;
+        }
     }
     out.powerLimited = heldAtCutoff ? 1 : 0;
     out.underVoltage = heldAtCutoff ? 1 : 0;
+    out.chargeLimited = heldAtMaxVoltage ? 1 : 0;
 
     // Charge and discharge limits.
     if (current < 0.0 && this->soc >= 1.0) {

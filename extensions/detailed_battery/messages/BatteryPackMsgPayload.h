@@ -30,7 +30,7 @@ typedef struct {
     int32_t activeSeriesCells;   //!< [-]  series cells per string still active
     int32_t powerLimited;        //!< [-]  1 = discharge current capped by the BMS limit (less than demanded)
     int32_t underVoltage;        //!< [-]  1 = held at the cutoff limit (cell voltage = cutoffCellVoltage)
-    int32_t chargeLimited;       //!< [-]  1 = pack full, surplus charge power rejected
+    int32_t chargeLimited;       //!< [-]  1 = charge current limited: held at maxCellVoltage (CV) or pack full
     int32_t depleted;            //!< [-]  1 = SoC at or below depletedSocThreshold, discharge stopped
 } BatteryPackMsgPayload;
 
