@@ -1,11 +1,14 @@
 """
 Power system: solar panel (eclipse-aware), constant bus load, per-wheel
-power draw and a battery that integrates all power nodes.
+power draw and an equivalent-circuit battery (EcmBattery, from the
+detailed_battery C++ extension) that integrates all power nodes and
+models pack voltage and current.
 
 Based on scenarioPowerDemo.py and scenarioAttitudeFeedbackRWPower.py.
 """
 
-from Basilisk.simulation import ReactionWheelPower, simpleBattery, simplePowerSink, simpleSolarPanel
+from Basilisk.simulation import ReactionWheelPower, simplePowerSink, simpleSolarPanel
+from detailed_battery import ecmBattery
 
 import config
 
@@ -36,10 +39,14 @@ class PowerSystem:
             sim.AddModelToTask(task_name, p)
             self.rw_power.append(p)
 
-        self.battery = simpleBattery.SimpleBattery()
+        self.battery = ecmBattery.EcmBattery()
         self.battery.ModelTag = "battery"
-        self.battery.storageCapacity = config.BATTERY_CAPACITY_WH * 3600.0  # J
-        self.battery.storedCharge_Init = self.battery.storageCapacity * config.BATTERY_INIT_SOC
+        self.battery.nSeries = config.BATTERY_N_SERIES
+        self.battery.nParallel = config.BATTERY_N_PARALLEL
+        self.battery.cellCapacityAh = config.BATTERY_CELL_AH
+        self.battery.initialSoc = config.BATTERY_INIT_SOC
+        self.battery.cutoffCellVoltage = config.BATTERY_CUTOFF_CELL_V
+        self.battery.maxCellVoltage = config.BATTERY_MAX_CELL_V
         self.battery.addPowerNodeToModel(self.panel.nodePowerOutMsg)
         self.battery.addPowerNodeToModel(self.bus_load.nodePowerOutMsg)
         for p in self.rw_power:

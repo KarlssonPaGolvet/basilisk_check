@@ -18,6 +18,7 @@ NAVIGATION = "Navigation"
 
 # Signal groups, worded as in the feasibility data-set table
 G_POWER = "Battery stored energy, capacity, net power"
+G_BAT_ELEC = "Battery voltage, current, electrical state"
 G_RW = "Wheel speed, motor torques, friction"
 G_TEMP = "Temperatures"
 G_SENSORS = "Rates, attitude, field and sun sensors"
@@ -79,11 +80,11 @@ class DataRecorder:
         """Register every recorded signal of the prototype."""
         # --- Internal sensors: power -------------------------------------
         bat = power.battery.batPowerOutMsg
-        self.add(INTERNAL, G_POWER, "simpleBattery", "batPowerOutMsg", bat,
+        self.add(INTERNAL, G_POWER, "EcmBattery", "batPowerOutMsg", bat,
                  "storageLevel", "J", ["battery_stored_energy_J"])
-        self.add(INTERNAL, G_POWER, "simpleBattery", "batPowerOutMsg", bat,
+        self.add(INTERNAL, G_POWER, "EcmBattery", "batPowerOutMsg", bat,
                  "storageCapacity", "J", ["battery_capacity_J"])
-        self.add(INTERNAL, G_POWER, "simpleBattery", "batPowerOutMsg", bat,
+        self.add(INTERNAL, G_POWER, "EcmBattery", "batPowerOutMsg", bat,
                  "currentNetPower", "W", ["battery_net_power_W"])
         self.add(INTERNAL, G_POWER, "simpleSolarPanel", "nodePowerOutMsg",
                  power.panel.nodePowerOutMsg, "netPower", "W", ["solar_panel_power_W"])
@@ -92,6 +93,30 @@ class DataRecorder:
         for i, p in enumerate(power.rw_power):
             self.add(INTERNAL, G_POWER, "ReactionWheelPower", f"nodePowerOutMsg[{i}]",
                      p.nodePowerOutMsg, "netPower", "W", [f"rw{i + 1}_power_W"])
+
+        # --- Internal sensors: battery electrical state (EcmBattery packOutMsg)
+        # Every field describes the start of the battery's 1 s step; current + = discharge.
+        pack = power.battery.packOutMsg
+        for fld, unit, col in [
+            ("packVoltage", "V", "battery_voltage_V"),
+            ("packCurrent", "A", "battery_current_A"),
+            ("cellVoltage", "V", "battery_cell_voltage_V"),
+            ("openCircuitVoltage", "V", "battery_ocv_V"),
+            ("polarizationVoltage", "V", "battery_rc_voltage_V"),
+            ("stateOfCharge", "-", "battery_soc"),
+            ("internalResistance", "Ohm", "battery_r0_Ohm"),
+            ("capacityAh", "Ah", "battery_capacity_Ah"),
+            ("powerDemand", "W", "battery_power_demand_W"),
+            ("powerDelivered", "W", "battery_power_delivered_W"),
+            ("heatLoss", "W", "battery_heat_loss_W"),
+            ("activeStrings", "-", "battery_active_strings"),
+            ("activeSeriesCells", "-", "battery_active_series_cells"),
+            ("powerLimited", "flag", "battery_power_limited"),
+            ("underVoltage", "flag", "battery_under_voltage"),
+            ("chargeLimited", "flag", "battery_charge_limited"),
+            ("depleted", "flag", "battery_depleted"),
+        ]:
+            self.add(INTERNAL, G_BAT_ELEC, "EcmBattery", "packOutMsg", pack, fld, unit, [col])
 
         # --- Internal sensors: reaction wheels ---------------------------
         n = rws.num

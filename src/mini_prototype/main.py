@@ -100,6 +100,8 @@ def main():
         "Samples per data set": len(isd),
         "Time in eclipse": f"{100 * eclipse_frac:.1f} %",
         "Battery SoC start / min / end": f"{soc.iloc[0]:.1f} / {soc.min():.1f} / {soc.iloc[-1]:.1f} %",
+        "Battery voltage min / max": f"{isd['battery_voltage_V'].min():.3f} / {isd['battery_voltage_V'].max():.3f} V",
+        "Battery current max dis-/charge": f"{isd['battery_current_A'].max():.3f} / {-isd['battery_current_A'].min():.3f} A",
         "Wall-clock time": f"{wall_s:.1f} s ({sim_time_s / wall_s:.0f}x real time)",
     }
     write_inventory(inv_path, recorder, frames, run_info)

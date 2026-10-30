@@ -73,8 +73,14 @@ PANEL_NORMAL_B = POINT_AXIS_B
 PANEL_AREA_M2 = 0.06
 PANEL_EFFICIENCY = 0.28
 BUS_LOAD_W = -6.0             # constant bus/payload sink (negative = draw)
-BATTERY_CAPACITY_WH = 40.0
+# Battery: EcmBattery from the detailed_battery extension (equivalent-circuit Li-ion pack).
+# Cell resistances, RC branch and OCV curve use the module defaults (NMC, 3.0-4.2 V).
+BATTERY_N_SERIES = 2          # 2S2P x 3.0 Ah ~ 45 Wh, ~7.4 V nominal bus
+BATTERY_N_PARALLEL = 2
+BATTERY_CELL_AH = 3.0
 BATTERY_INIT_SOC = 0.8
+BATTERY_CUTOFF_CELL_V = 3.0   # BMS discharge cutoff per cell
+BATTERY_MAX_CELL_V = 4.20     # CV charge limit per cell
 
 # --- simpleNav noise (1-sigma Gauss-Markov diagonal + random-walk bounds)
 # State order: position(3), velocity(3), attitude MRP(3), rate(3), sun vector(3), accumulated dV(3)

@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+import config  # noqa: E402
 from recorders import INTERNAL, NAVIGATION, XYZ  # noqa: E402
 
 
@@ -13,7 +14,7 @@ def plot_summary(frames, num_rw, num_css, path):
     isd, nav = frames[INTERNAL], frames[NAVIGATION]
     t = isd["time_s"] / 60.0
 
-    fig, axs = plt.subplots(5, 2, figsize=(13, 16), sharex=True)
+    fig, axs = plt.subplots(6, 2, figsize=(13, 19), sharex=True)
 
     ax = axs[0, 0]
     soc = 100.0 * isd["battery_stored_energy_J"] / isd["battery_capacity_J"]
@@ -87,7 +88,6 @@ def plot_summary(frames, num_rw, num_css, path):
         ax.plot(t, isd[f"css{i + 1}_cos"], label=f"CSS{i + 1}")
     ax.set_ylabel("Cosine output [-]")
     ax.set_title("Coarse sun sensors")
-    ax.set_xlabel("Time [min]")
     ax.legend(ncol=3, fontsize=8)
 
     ax = axs[4, 1]
@@ -97,8 +97,27 @@ def plot_summary(frames, num_rw, num_css, path):
             "k--", lw=1, label="|B| WMM")
     ax.set_ylabel("Field [uT]")
     ax.set_title("Magnetometer (body) and WMM field magnitude")
-    ax.set_xlabel("Time [min]")
     ax.legend(ncol=2, fontsize=8)
+
+    ax = axs[5, 0]
+    ax.plot(t, isd["battery_voltage_V"], label="Terminal (bus) voltage")
+    ax.plot(t, isd["battery_ocv_V"], "--", lw=1, label="Open-circuit voltage")
+    ax.axhline(config.BATTERY_N_SERIES * config.BATTERY_CUTOFF_CELL_V, color="r", ls=":", lw=1,
+               label="BMS cutoff")
+    ax.set_ylabel("Voltage [V]")
+    ax.set_title("Battery pack voltage")
+    ax.set_xlabel("Time [min]")
+    ax.legend(fontsize=8)
+
+    ax = axs[5, 1]
+    ax.plot(t, isd["battery_current_A"], label="Pack current (+ discharge)")
+    full = isd["battery_charge_limited"] > 0
+    ax.fill_between(t, 0, 1, where=full, transform=ax.get_xaxis_transform(), color="C2", alpha=0.15,
+                    label="Charge-limited (CV / full)")
+    ax.set_ylabel("Current [A]")
+    ax.set_title("Battery pack current")
+    ax.set_xlabel("Time [min]")
+    ax.legend(fontsize=8)
 
     for ax in axs.flat:
         ax.grid(True, alpha=0.3)

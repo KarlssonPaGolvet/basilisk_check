@@ -12,11 +12,14 @@ import numpy as np
 from Basilisk.utilities import RigidBodyKinematics as rbk
 
 import config
-from recorders import (G_ENV, G_NAV, G_POWER, G_RW, G_SENSORS, G_TEMP, INTERNAL, NAVIGATION, XYZ)
+from recorders import (G_BAT_ELEC, G_ENV, G_NAV, G_POWER, G_RW, G_SENSORS, G_TEMP, INTERNAL, NAVIGATION, XYZ)
 
-# Data-set table from the feasibility check: (dataset, signals, Basilisk modules)
+# Data-set table from the feasibility check: (dataset, signals, Basilisk modules).
+# simpleBattery is replaced by EcmBattery (detailed_battery C++ extension), which also
+# provides the battery voltage/current row.
 DATASET_TABLE = [
-    (INTERNAL, G_POWER, ["simpleBattery", "simplePowerSink", "simpleSolarPanel", "ReactionWheelPower"]),
+    (INTERNAL, G_POWER, ["EcmBattery", "simplePowerSink", "simpleSolarPanel", "ReactionWheelPower"]),
+    (INTERNAL, G_BAT_ELEC, ["EcmBattery"]),
     (INTERNAL, G_RW, ["reactionWheels"]),
     (INTERNAL, G_TEMP, ["sensorThermal", "motorThermal", "tempMeasurement"]),
     (INTERNAL, G_SENSORS, ["imuSensor", "starTracker", "magnetometer", "coarseSunSensor"]),
@@ -97,6 +100,65 @@ def sensor_error_check(isd, nav_df):
     return [(label, unit, spec, err.mean(), err.std(), np.abs(err).max()) for label, unit, spec, err in rows]
 
 
+def battery_electrical_check(isd, nav_df):
+    """Voltage/current checks on the EcmBattery telemetry.
+
+    Returns rows of (check, result, criterion, status); status is PASS/FAIL, or "info"
+    for values without a pass criterion.
+    """
+    V, I = isd["battery_voltage_V"], isd["battery_current_A"]
+    v_cell, soc, cap = isd["battery_cell_voltage_V"], isd["battery_soc"], isd["battery_capacity_Ah"]
+    demand, delivered = isd["battery_power_demand_W"], isd["battery_power_delivered_W"]
+    limited = (isd["battery_power_limited"] + isd["battery_charge_limited"] + isd["battery_depleted"]) > 0
+    nodes = isd["solar_panel_power_W"] + isd["bus_load_power_W"] + isd.filter(regex=r"^rw\d+_power_W$").sum(axis=1)
+    sunlit = nav_df["eclipse_shadow_factor"] > 0.5
+    dt = float(isd["time_s"].diff().median())
+    cutoff = config.BATTERY_CUTOFF_CELL_V
+    status = lambda ok: "PASS" if ok else "FAIL"
+
+    # Coulomb counting over the run from the logged samples (start-of-step values,
+    # so the SoC change between samples a and b is the sum of I over a..b-1)
+    soc_change = soc.iloc[-1] - soc.iloc[1]
+    soc_coulomb = -float((I.iloc[1:-1] * dt / (3600.0 * cap.iloc[1:-1])).sum())
+    soc_std = isd["battery_stored_energy_J"] / isd["battery_capacity_J"]
+
+    def flag_time(col):
+        return f"{isd[col].sum() * dt:.0f} s ({100 * isd[col].mean():.1f} %)"
+
+    def c_rate(amps):
+        return f"{amps:.2f} A ({amps / cap.max():.2f} C)"
+
+    rows = [
+        ("Pack voltage range", f"{V.min():.3f} - {V.max():.3f} V", "-", "info"),
+        ("Cell voltage at or above BMS cutoff", f"min {v_cell.min():.4f} V", f">= {cutoff:.2f} V",
+         status(v_cell.min() >= cutoff - 1e-6)),
+        ("Cell voltage at or below CV charge limit", f"max {v_cell.max():.4f} V",
+         f"<= {config.BATTERY_MAX_CELL_V:.2f} V", status(v_cell.max() <= config.BATTERY_MAX_CELL_V + 1e-6)),
+        ("Max discharge current", c_rate(I.max()), "-", "info"),
+        ("Max charge current", c_rate(-I.min()), "-", "info"),
+        ("Sunlit: mean voltage / current", f"{V[sunlit].mean():.3f} V / {I[sunlit].mean():+.3f} A", "-", "info"),
+        ("Eclipse: mean voltage / current", f"{V[~sunlit].mean():.3f} V / {I[~sunlit].mean():+.3f} A", "-", "info"),
+        ("Power demand = -(sum of power nodes)", f"max diff {np.abs(demand + nodes).max():.2e} W", "< 1e-6 W",
+         status(np.abs(demand + nodes).max() < 1e-6)),
+        ("Delivered = demanded when not limited", f"max diff {np.abs(delivered - demand)[~limited].max():.2e} W",
+         "< 1e-6 W", status(np.abs(delivered - demand)[~limited].max() < 1e-6)),
+        ("Delivered power = V x I", f"max diff {np.abs(delivered - V * I).max():.2e} W", "< 1e-9 W",
+         status(np.abs(delivered - V * I).max() < 1e-9)),
+        ("Coulomb counting over the run", f"SoC change {100 * soc_change:+.3f} %, integral(I dt)/Ah "
+         f"{100 * soc_coulomb:+.3f} %", f"diff < 0.5 % SoC ({dt:g} s samples)",
+         status(abs(soc_change - soc_coulomb) < 0.005)),
+        ("SoC agrees between packOutMsg and batPowerOutMsg", f"max diff {100 * np.abs(soc - soc_std).max():.4f} % SoC",
+         "< 0.1 % SoC (packOutMsg is start of step)", status(np.abs(soc - soc_std).max() < 0.001)),
+        ("heatLoss >= 0", f"min {isd['battery_heat_loss_W'].min():.2e} W, mean {isd['battery_heat_loss_W'].mean():.3f} W",
+         ">= 0", status(isd["battery_heat_loss_W"].min() >= 0.0)),
+        ("Time charge-limited (CV phase / full)", flag_time("battery_charge_limited"), "-", "info"),
+        ("Time power-limited / at cutoff", f"{flag_time('battery_power_limited')} / {flag_time('battery_under_voltage')}",
+         "-", "info"),
+        ("Time depleted", flag_time("battery_depleted"), "-", "info"),
+    ]
+    return rows
+
+
 def write_inventory(path, recorder, frames, run_info):
     channels = recorder.channels
     lines = ["# Mini prototype - data inventory", "",
@@ -155,6 +217,15 @@ def write_inventory(path, recorder, frames, run_info):
               "|---|---|---|---|---|---|"]
     for label, unit, spec, mean, std, mx in sensor_error_check(frames[INTERNAL], frames[NAVIGATION]):
         lines.append(f"| {label} | {unit} | {spec} | {_fmt(mean)} | {_fmt(std)} | {_fmt(mx)} |")
+
+    # --- Battery voltage / current --------------------------------------
+    lines += ["", "## Battery voltage and current (EcmBattery)", "",
+              f"{config.BATTERY_N_SERIES}S{config.BATTERY_N_PARALLEL}P, {config.BATTERY_CELL_AH:g} Ah cells, "
+              f"start at {100 * config.BATTERY_INIT_SOC:.0f} % SoC. Unregulated bus: the bus voltage is the "
+              "pack voltage. Current + = discharge.", "",
+              "| Check | Result | Criterion | Status |", "|---|---|---|---|"]
+    for check, result, criterion, state in battery_electrical_check(frames[INTERNAL], frames[NAVIGATION]):
+        lines.append(f"| {check} | {result} | {criterion} | {state} |")
 
     used = {c.module for c in channels}
     missing = [(d, g, [m for m in mods if m not in used]) for d, g, mods in DATASET_TABLE]
